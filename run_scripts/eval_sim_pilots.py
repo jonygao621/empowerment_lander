@@ -15,8 +15,7 @@ from gym import spaces, wrappers
 from gym.envs.registration import register
 from envs import LunarLanderEmpowerment, LunarLander
 
-from policies import FullPilotPolicy
-from policies import LaggyPilotPolicy
+from policies import FullPilotPolicy, LaggyPilotPolicy, NoopPilotPolicy, NoisyPilotPolicy
 
 import tensorflow as tf
 
@@ -60,8 +59,10 @@ if __name__ == '__main__':
 
     full_pilot_policy = FullPilotPolicy(data_dir, policy_path= os.path.join(data_dir, '01-13-2020 09-46-18/full_pilot_reward.pkl'))
     laggy_pilot_policy = LaggyPilotPolicy(data_dir, full_policy=full_pilot_policy.policy)
+    noisy_pilot_policy = NoisyPilotPolicy(data_dir, full_policy=full_pilot_policy.policy)
+    noop_pilot_policy = NoopPilotPolicy(data_dir, full_policy=full_pilot_policy.policy)
 
-    pilot_names = ['full', 'laggy']
+    pilot_names = ['full', 'laggy', 'noisy', 'noop']
     n_eval_eps = 100
 
     pilot_evals = [
