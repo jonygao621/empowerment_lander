@@ -58,7 +58,7 @@ if __name__ == '__main__':
     max_ep_len = 300000
     env = LunarLanderEmpowerment(empowerment=0.0, ac_continuous=False)
 
-    full_pilot_policy = FullPilotPolicy(data_dir, policy_path= os.path.join(data_dir, 'full_pilot_reward_longtrain.pkl'))
+    full_pilot_policy = FullPilotPolicy(data_dir, policy_path= os.path.join(data_dir, '01-13-2020 09-46-18/full_pilot_reward.pkl'))
     laggy_pilot_policy = LaggyPilotPolicy(data_dir, full_policy=full_pilot_policy.policy)
 
     pilot_names = ['full', 'laggy']

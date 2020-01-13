@@ -243,7 +243,7 @@ class CoPilotPolicy(object):
             gamma=0.99
         )
 
-        self.policy_path = os.path.join(self.data_dir, 'full_pilot_reward_longtrain.pkl')
+        self.policy_path = os.path.join(self.data_dir, 'full_pilot_reward.pkl')
         self.policy.save_act(path=self.policy_path)
 
     def step(self, observation, **kwargs):

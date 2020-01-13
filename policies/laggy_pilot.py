@@ -10,7 +10,7 @@ class LaggyPilotPolicy(object):
         elif full_policy is None and self.full_policy is None:
             raise NotImplementedError
 
-    def step(self, obs, lag_prob=0.5):
+    def step(self, obs, lag_prob=0.7):
         if self.last_laggy_pilot_act is None or np.random.random() >= lag_prob:
             action = self.full_policy._act(obs)[0]
             self.last_laggy_pilot_act = action

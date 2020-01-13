@@ -19,7 +19,7 @@ class FullPilotPolicy(object):
             target_network_update_freq=500,
             gamma=0.99
         )
-        self.policy_path = os.path.join(self.data_dir, 'full_pilot_reward_longtrain.pkl')
+        self.policy_path = os.path.join(self.data_dir, 'full_pilot_reward.pkl')
         self.policy.save_act(path=self.policy_path)
 
     def step(self, observation):
