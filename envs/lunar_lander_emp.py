@@ -446,7 +446,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         :return: Volume estimation of empowerment
         """
         # array for the final state
-        X = np.zeros((n_traj, 6))
+        X = np.zeros((n_traj, state_dim))
         action_variance = 0.1
         self.fake_step = True
 
@@ -468,7 +468,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
                 if done:
                     break
             # store the final state
-            X[n, :] = x[:6]
+            X[n, :] = x
 
             self.world = orig_world
             self.lander = orig_lander
@@ -479,14 +479,13 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.game_over = orig_game_over
             # compute the convex hull of the final state
         # e.g., by scipy.spatial.ConvexHull
-        X = X[:, ~np.all(X[1:] == X[:-1], axis=0)]
+        for i in range(n_traj):
+            X = X[:, ~(X == X[i,:]).all(0)]
         try:
             ch = ConvexHull(X)
             # take volume
             ch_volume = ch.volume
         except Exception as e:
-            print(e)
-            print(X)
             ch_volume = 0
         self.fake_step = False
         return ch_volume
