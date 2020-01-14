@@ -56,8 +56,7 @@ def learn(
         **network_kwargs):
     # Create all the functions necessary to train the model
 
-    sess = tf.Session(graph=tf.Graph())
-    sess.__enter__()
+    sess = get_session() #tf.Session(graph=tf.Graph())
     set_global_seeds(seed)
 
     q_func = build_q_func(network, **network_kwargs)
@@ -219,6 +218,7 @@ class CoPilotPolicy(object):
         self.policy = None
         self.policy_path = policy_path
         self.data_dir = data_dir
+        self.scope=None
         if policy_path is not None:
             self.policy = deepq.deepq.load_act(policy_path)
 
@@ -228,14 +228,14 @@ class CoPilotPolicy(object):
             scope = copilot_scope
         elif copilot_scope is None:
             scope = str(uuid.uuid4())
-
+        self.scope = scope
         self.policy, self.reward_data = learn(
             env,
             scope=scope,
             network='mlp',
             total_timesteps=max_timesteps,
             pilot_tol=pilot_tol,
-            reuse=tf.AUTO_REUSE,
+            reuse=False,
             lr=1e-3,
             target_network_update_freq=500,
             gamma=0.99
@@ -244,6 +244,19 @@ class CoPilotPolicy(object):
         self.policy_path = os.path.join(self.data_dir, 'co_pilot_policy.pkl')
         self.policy.save_act(path=self.policy_path)
 
-    def step(self, observation, **kwargs):
-        return self.policy.step(observation, **kwargs)
+    def step(self, observation, pilot_policy, pilot_tol, **kwargs):
+        with tf.variable_scope(self.scope, reuse=None):
+            masked_obs = mask_helipad(observation)[0]
+            pilot_action = pilot_policy.step(masked_obs[None, :9])
+
+            if masked_obs.size == 9:
+                feed_obs = np.concatenate((masked_obs, onehot_encode(pilot_action)))
+            else:
+                feed_obs = masked_obs
+
+            return self.policy._act(
+                feed_obs[None, :],
+                pilot_tol=pilot_tol,
+                pilot_action=pilot_action
+            )[0][0]
 
