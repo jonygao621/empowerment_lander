@@ -3,7 +3,7 @@ import baselines.common.tf_util as U
 
 def co_build_act(make_obs_ph, q_func, num_actions, scope="co_deepq", reuse=None, using_control_sharing=True):
   with tf.variable_scope(scope, reuse=reuse):
-    observations_ph = U.ensure_tf_input(make_obs_ph("observation"))
+    observations_ph = make_obs_ph("observation")
 
     pilot_action_ph = tf.placeholder(tf.int32, (), name='pilot_action')
     pilot_tol_ph = tf.placeholder(tf.float32, (), name='pilot_tol')

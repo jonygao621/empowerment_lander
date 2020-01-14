@@ -41,6 +41,7 @@ from pickle import dumps, loads
 MAX_NUM_STEPS = 1000
 
 OBS_DIM = 9
+ACT_DIM = 6
 
 FPS    = 50
 SCALE  = 30.0   # affects how fast-paced the game is, forces should be adjusted as well
@@ -92,7 +93,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
 
     continuous = False
 
-    def __init__(self, empowerment, ac_continuous=True, pilot_policy=None):
+    def __init__(self, empowerment, ac_continuous=True, pilot_policy=None, **extras):
         EzPickle.__init__(self, empowerment, ac_continuous)
         self.seed()
         self.viewer = None
@@ -109,6 +110,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         self.copilot = False
         if self.pilot_policy is not None:
             self.copilot = True
+
+        self.fake_step = False
 
         # useful range is -1 .. +1, but spikes can be higher
         obs_box = spaces.Box(-np.inf, np.inf, shape=(9,), dtype=np.float32)
@@ -127,7 +130,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.action_space = spaces.Box(-1, +1, (2,), dtype=np.float32)
         else:
             # Nop, fire left engine, main engine, right engine
-            self.action_space = spaces.Discrete(6)
+            self.action_space = spaces.Discrete(ACT_DIM)
 
         self.empowerment_coeff = empowerment
         self.curr_step = 0
@@ -357,8 +360,12 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         reward -= s_power * 0.03
 
         ## Empowerment
-        if self.empowerment_coeff > 0:
-            reward += self.empowerment_coeff * self.compute_empowerment(state, OBS_DIM)
+        if self.empowerment_coeff > 0 and not self.fake_step:
+            height_scale = (pos.y - self.helipad_y) / (VIEWPORT_H / SCALE)
+            obs_dim = OBS_DIM
+            if self.copilot:
+                obs_dim = obs_dim + ACT_DIM
+            reward += self.empowerment_coeff * height_scale * self.compute_empowerment(state, obs_dim)
         timeout = self.curr_step >= MAX_NUM_STEPS
         at_site = pos.x >= self.helipad_x1 and pos.x <= self.helipad_x2
 
@@ -374,10 +381,12 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             info['trajectory'] = self.trajectory
             info['actions'] = self.actions
 
-        if self.copilot:
-            state = np.concatenate((state, onehot_encode(self.pilot_policy(state[None, :]))))
+        state = np.array(state, dtype=np.float32)
 
-        return np.array(state, dtype=np.float32), reward, done, info
+        if self.copilot:
+            state = np.concatenate((state, onehot_encode(self.pilot_policy.step(state[None, :]))))
+
+        return state, reward, done, info
 
     def render(self, mode='human', close=False):
         if close:
@@ -425,7 +434,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.viewer.close()
             self.viewer = None
 
-    def compute_empowerment(self, state, state_dim, horizon=10, n_traj=100):
+    def compute_empowerment(self, state, state_dim, horizon=1, n_traj=1):
         """
         Estimate empowerment using a convex hull approximation.
 
@@ -437,91 +446,42 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         :return: Volume estimation of empowerment
         """
         # array for the final state
-        raise NotImplementedError
-        X = np.zeros((n_traj, state_dim-1))
+        X = np.zeros((n_traj, 6))
         action_variance = 0.1
+        self.fake_step = True
 
         orig_state = state
         orig_world = self.world
         orig_lander = self.lander
+        orig_curr_step = self.curr_step
+        orig_trajectory = self.trajectory
+        orig_actions = self.actions
+        orig_shaping = self.prev_shaping
+        orig_game_over = self.game_over
 
         for n in range(n_traj):
             # generate an action sequence.
             for _ in range(horizon):
                 # step in environment using random action a
                 a = self.action_space.sample()
-                x, rew, done, info = self._step(a)
+                x, rew, done, info = self.step(a)
                 if done:
                     break
             # store the final state
-            X[n, :] = x[:-1]
+            X[n, :] = x[:6]
 
             self.world = orig_world
             self.lander = orig_lander
-        # compute the convex hull of the final state
+            self.curr_step = orig_curr_step
+            self.trajectory = orig_trajectory
+            self.actions = orig_actions
+            self.prev_shaping = orig_shaping
+            self.game_over = orig_game_over
+            # compute the convex hull of the final state
         # e.g., by scipy.spatial.ConvexHull
-        ch = ConvexHull(X)
+        #ch = ConvexHull(X)
         # take volume
-        ch_volume = ch.volume
-        return ch_volume
-
-def heuristic(env, s):
-    # Heuristic for:
-    # 1. Testing.
-    # 2. Demonstration rollout.
-    angle_targ = s[0] * 0.5 + s[
-        2] * 1.0  # angle should point towards center (s[0] is horizontal coordinate, s[2] hor speed)
-    if angle_targ > 0.4: angle_targ = 0.4  # more than 0.4 radians (22 degrees) is bad
-    if angle_targ < -0.4: angle_targ = -0.4
-    hover_targ = 0.55 * np.abs(s[0])  # target y should be proporional to horizontal offset
-
-    # PID controller: s[4] angle, s[5] angularSpeed
-    angle_todo = (angle_targ - s[4]) * 0.5 - (s[5]) * 1.0
-    # print("angle_targ=%0.2f, angle_todo=%0.2f" % (angle_targ, angle_todo))
-
-    # PID controller: s[1] vertical coordinate s[3] vertical speed
-    hover_todo = (hover_targ - s[1]) * 0.5 - (s[3]) * 0.5
-    # print("hover_targ=%0.2f, hover_todo=%0.2f" % (hover_targ, hover_todo))
-
-    if s[6] or s[7]:  # legs have contact
-        angle_todo = 0
-        hover_todo = -(s[3]) * 0.5  # override to reduce fall speed, that's all we need after contact
-
-    if env.continuous:
-        a = np.array([hover_todo * 20 - 1, -angle_todo * 20])
-        a = np.clip(a, -1, +1)
-    else:
-        a = 0
-        if hover_todo > np.abs(angle_todo) and hover_todo > 0.05:
-            a = 2
-        elif angle_todo < -0.05:
-            a = 3
-        elif angle_todo > +0.05:
-            a = 1
-    return a
-
-
-def demo_heuristic_lander(env, seed=None, render=False):
-    env.seed(seed)
-    total_reward = 0
-    steps = 0
-    s = env.reset()
-    while True:
-        a = heuristic(env, s)
-        s, r, done, info = env.step(a)
-        total_reward += r
-
-        if render:
-            still_open = env.render()
-            if still_open == False: break
-
-        if steps % 20 == 0 or done:
-            print("observations:", " ".join(["{:+0.2f}".format(x) for x in s]))
-            print("step {} total_reward {:+0.2f}".format(steps, total_reward))
-        steps += 1
-        if done: break
-    return total_reward
-
-
-
+        #ch_volume = ch.volume
+        self.fake_step = False
+        return 1 # ch_volume
 

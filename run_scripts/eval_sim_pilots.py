@@ -1,32 +1,10 @@
 from __future__ import division
-import pickle
-import random
 import os
-import math
-import types
-import uuid
-import time
-from copy import copy
 from collections import defaultdict, Counter
 
-import numpy as np
-import gym
-from gym import spaces, wrappers
-from gym.envs.registration import register
 from envs import LunarLanderEmpowerment, LunarLander
 
-from policies import FullPilotPolicy, LaggyPilotPolicy, NoopPilotPolicy, NoisyPilotPolicy
-
-import tensorflow as tf
-
-from baselines import logger
-from baselines.common.schedules import LinearSchedule
-from baselines import deepq
-from baselines.common import models
-from baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
-from baselines.deepq.deepq import ActWrapper
-
-from matplotlib import pyplot as plt
+from policies import FullPilotPolicy, LaggyPilotPolicy, NoopPilotPolicy, NoisyPilotPolicy, SensorPilotPolicy
 
 from utils.env_utils import *
 
@@ -54,15 +32,16 @@ if __name__ == '__main__':
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
 
-    max_ep_len = 300000
+    max_ep_len = 1000
     env = LunarLanderEmpowerment(empowerment=0.0, ac_continuous=False)
 
     full_pilot_policy = FullPilotPolicy(data_dir, policy_path= os.path.join(data_dir, '01-13-2020 09-46-18/full_pilot_reward.pkl'))
     laggy_pilot_policy = LaggyPilotPolicy(data_dir, full_policy=full_pilot_policy.policy)
     noisy_pilot_policy = NoisyPilotPolicy(data_dir, full_policy=full_pilot_policy.policy)
     noop_pilot_policy = NoopPilotPolicy(data_dir, full_policy=full_pilot_policy.policy)
+    sensor_pilot_policy = SensorPilotPolicy(data_dir, full_policy=full_pilot_policy.policy)
 
-    pilot_names = ['full', 'laggy', 'noisy', 'noop']
+    pilot_names = ['full', 'laggy', 'noisy', 'noop', 'sensor']
     n_eval_eps = 100
 
     pilot_evals = [

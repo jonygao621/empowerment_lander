@@ -13,6 +13,7 @@ from baselines.common import set_global_seeds
 from baselines import deepq
 from baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from baselines.deepq.utils import ObservationInput
+from baselines.deepq.deepq import ActWrapper
 
 from baselines.common.tf_util import get_session
 from baselines.deepq.models import build_q_func
@@ -47,7 +48,7 @@ def learn(
         param_noise=False,
         num_cpu=5,
         callback=None,
-        scope='deepq',
+        scope='co_deepq',
         pilot_tol=0,
         pilot_is_human=False,
         reuse=False,
@@ -55,20 +56,17 @@ def learn(
         **network_kwargs):
     # Create all the functions necessary to train the model
 
-    sess = get_session()
+    sess = tf.Session(graph=tf.Graph())
+    sess.__enter__()
     set_global_seeds(seed)
 
     q_func = build_q_func(network, **network_kwargs)
-
-    if sess is None:
-        sess = U.make_session(num_cpu=num_cpu)
-        sess.__enter__()
 
     observation_space = env.observation_space
     def make_obs_ph(name):
         return ObservationInput(observation_space, name=name)
 
-    using_control_sharing = pilot_tol > 0
+    using_control_sharing = True #pilot_tol > 0
 
     act, train, update_target, debug = co_build_train(
         scope=scope,
@@ -88,7 +86,7 @@ def learn(
         'num_actions': env.action_space.n,
     }
 
-    act = deepq.ActWrapper(act, act_params)
+    act = ActWrapper(act, act_params)
 
     # Create the replay buffer
     if prioritized_replay:
@@ -138,13 +136,13 @@ def learn(
 
             act_kwargs = {}
             if using_control_sharing:
-                act_kwargs['pilot_action'] = env.unwrapped.pilot_policy(obs[None, :9])
+                act_kwargs['pilot_action'] = env.unwrapped.pilot_policy.step(obs[None, :9])
                 act_kwargs['pilot_tol'] = pilot_tol
             else:
                 act_kwargs['update_eps'] = exploration.value(t)
 
             #action = act(masked_obs[None, :], **act_kwargs)[0][0]
-            action = act(np.array(masked_obs)[None], **act_kwargs)[0]
+            action = act(np.array(masked_obs)[None], **act_kwargs)[0][0]
             env_action = action
             reset = False
             new_obs, rew, done, info = env.step(env_action)
@@ -224,26 +222,26 @@ class CoPilotPolicy(object):
         if policy_path is not None:
             self.policy = deepq.deepq.load_act(policy_path)
 
-    def learn(self, env, max_timesteps, copilot_scope='co_deepq', pilot_tol=0, reuse=False):
+    def learn(self, env, max_timesteps, copilot_scope='co_deepq', pilot_tol=0, reuse=False, **extras):
 
         if copilot_scope is not None:
             scope = copilot_scope
         elif copilot_scope is None:
             scope = str(uuid.uuid4())
 
-        self.policy = learn(
+        self.policy, self.reward_data = learn(
             env,
             scope=scope,
             network='mlp',
             total_timesteps=max_timesteps,
             pilot_tol=pilot_tol,
-            reuse=reuse,
+            reuse=tf.AUTO_REUSE,
             lr=1e-3,
             target_network_update_freq=500,
             gamma=0.99
         )
 
-        self.policy_path = os.path.join(self.data_dir, 'full_pilot_reward.pkl')
+        self.policy_path = os.path.join(self.data_dir, 'co_pilot_policy.pkl')
         self.policy.save_act(path=self.policy_path)
 
     def step(self, observation, **kwargs):
