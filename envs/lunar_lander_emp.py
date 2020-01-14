@@ -434,7 +434,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.viewer.close()
             self.viewer = None
 
-    def compute_empowerment(self, state, state_dim, horizon=1, n_traj=1):
+    def compute_empowerment(self, state, state_dim, horizon=5, n_traj=10):
         """
         Estimate empowerment using a convex hull approximation.
 
@@ -479,9 +479,15 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.game_over = orig_game_over
             # compute the convex hull of the final state
         # e.g., by scipy.spatial.ConvexHull
-        #ch = ConvexHull(X)
-        # take volume
-        #ch_volume = ch.volume
+        X = X[:, ~np.all(X[1:] == X[:-1], axis=0)]
+        try:
+            ch = ConvexHull(X)
+            # take volume
+            ch_volume = ch.volume
+        except Exception as e:
+            print(e)
+            print(X)
+            ch_volume = 0
         self.fake_step = False
-        return 1 # ch_volume
+        return ch_volume
 
