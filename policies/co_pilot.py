@@ -241,7 +241,7 @@ class CoPilotPolicy(object):
             gamma=0.99
         )
 
-        self.policy_path = os.path.join(self.data_dir, 'co_pilot_policy.pkl')
+        self.policy_path = self.data_dir + '/' + self.scope + '_policy.pkl'
         self.policy.save_act(path=self.policy_path)
 
     def step(self, observation, pilot_policy, pilot_tol, **kwargs):
