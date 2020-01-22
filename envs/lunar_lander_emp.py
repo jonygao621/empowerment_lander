@@ -1,6 +1,9 @@
 import sys, math
 import numpy as np
 
+# import sys
+# sys.path.insert(0, "/usr/local/lib/python3.7/site-packages/Box2D")
+
 import Box2D
 from Box2D.b2 import (edgeShape, circleShape, fixtureDef, polygonShape, revoluteJointDef, contactListener)
 
@@ -298,10 +301,10 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
                 1]  # 4 is move a bit downwards, +-2 for randomness
             oy = -tip[1] * (4 / SCALE + 2 * dispersion[0]) - side[1] * dispersion[1]
             impulse_pos = (self.lander.position[0] + ox, self.lander.position[1] + oy)
-            p = self._create_particle(3.5, impulse_pos[0], impulse_pos[1],
-                                      m_power)  # particles are just a decoration, 3.5 is here to make particle speed adequate
-            p.ApplyLinearImpulse((ox * MAIN_ENGINE_POWER * m_power, oy * MAIN_ENGINE_POWER * m_power), impulse_pos,
-                                 True)
+            ### p = self._create_particle(3.5, impulse_pos[0], impulse_pos[1], ###
+                                      ### m_power)  # particles are just a decoration, 3.5 is here to make particle speed adequate ###
+            ### p.ApplyLinearImpulse((ox * MAIN_ENGINE_POWER * m_power, oy * MAIN_ENGINE_POWER * m_power), impulse_pos, ###
+                                 ### True) ###
             self.lander.ApplyLinearImpulse((-ox * MAIN_ENGINE_POWER * m_power, -oy * MAIN_ENGINE_POWER * m_power),
                                            impulse_pos, True)
 
@@ -317,9 +320,9 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             oy = -tip[1] * dispersion[0] - side[1] * (3 * dispersion[1] + direction * SIDE_ENGINE_AWAY / SCALE)
             impulse_pos = (self.lander.position[0] + ox - tip[0] * 17 / SCALE,
                            self.lander.position[1] + oy + tip[1] * SIDE_ENGINE_HEIGHT / SCALE)
-            p = self._create_particle(0.7, impulse_pos[0], impulse_pos[1], s_power)
-            p.ApplyLinearImpulse((ox * SIDE_ENGINE_POWER * s_power, oy * SIDE_ENGINE_POWER * s_power), impulse_pos,
-                                 True)
+            ### p = self._create_particle(0.7, impulse_pos[0], impulse_pos[1], s_power) ###
+            ### p.ApplyLinearImpulse((ox * SIDE_ENGINE_POWER * s_power, oy * SIDE_ENGINE_POWER * s_power), impulse_pos, ###
+                                 ### True) ###
             self.lander.ApplyLinearImpulse((-ox * SIDE_ENGINE_POWER * s_power, -oy * SIDE_ENGINE_POWER * s_power),
                                            impulse_pos, True)
 
@@ -342,8 +345,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         assert len(state) == OBS_DIM
 
         self.curr_step += 1
-        self.trajectory.append(state)
-        self.actions.append(action)
+#         self.trajectory.append(state)
+#         self.actions.append(action)
 
         reward = 0
         dx = (pos.x - helipad_x) / (VIEWPORT_W/SCALE/2)
@@ -455,8 +458,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         orig_world = self.world
         orig_lander = self.lander
         orig_curr_step = self.curr_step
-        orig_trajectory = self.trajectory
-        orig_actions = self.actions
+#         orig_trajectory = self.trajectory
+#         orig_actions = self.actions
         orig_shaping = self.prev_shaping
         orig_game_over = self.game_over
 
@@ -474,8 +477,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.world = orig_world
             self.lander = orig_lander
             self.curr_step = orig_curr_step
-            self.trajectory = orig_trajectory
-            self.actions = orig_actions
+#             self.trajectory = orig_trajectory
+#             self.actions = orig_actions
             self.prev_shaping = orig_shaping
             self.game_over = orig_game_over
             # compute the convex hull of the final state
