@@ -88,11 +88,11 @@ def run_ep_copilot(policy, env, max_ep_len, pilot, pilot_tol, render=False, pilo
 
 def run_experiment(empowerment):
 
-    base_dir = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
+    base_dir = os.getcwd() + '/data' # os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
     logger.configure(dir=base_dir, format_strs=['stdout', 'log', 'csv', 'tensorboard'])
 
-    max_ep_len = 1000
-    n_training_episodes = 500
+    max_ep_len = 10 #1000
+    n_training_episodes = 1 # 500
 
     env = LunarLanderEmpowerment(empowerment=0.0, ac_continuous=False)
 
@@ -106,7 +106,7 @@ def run_experiment(empowerment):
     sim_pilots = [full_pilot_policy, laggy_pilot_policy, noisy_pilot_policy, noop_pilot_policy, sensor_pilot_policy]
 
     pilot_names = ['full', 'laggy', 'noisy', 'noop', 'sensor']
-    n_eval_eps = 100
+    n_eval_eps = 1#100
 
     pilot_evals = [
         list(zip(*[run_ep(sim_policy, env, render=False, max_ep_len=max_ep_len) for _ in

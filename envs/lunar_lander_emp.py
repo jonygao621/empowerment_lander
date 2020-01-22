@@ -1,6 +1,8 @@
 import sys, math
 import numpy as np
 
+from copy import deepcopy
+
 # import sys
 # sys.path.insert(0, "/usr/local/lib/python3.7/site-packages/Box2D")
 
@@ -70,6 +72,8 @@ SIDE_ENGINE_AWAY = 12.0
 VIEWPORT_W = 600
 VIEWPORT_H = 400
 
+NUM_CONCAT = 5
+
 
 class ContactDetector(contactListener):
     def __init__(self, env):
@@ -114,6 +118,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         self.copilot = False
         if self.pilot_policy is not None:
             self.copilot = True
+            self.past_pilot_actions = np.zeros((NUM_CONCAT * ACT_DIM))
 
         self.fake_step = False
 
@@ -122,8 +127,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
 
         if self.copilot:
             # consider action from pilot as well
-            self.observation_space = spaces.Box(np.concatenate((obs_box.low, np.zeros(6))),
-                                         np.concatenate((obs_box.high, np.ones(6))))
+            self.observation_space = spaces.Box(np.concatenate((obs_box.low, np.zeros(NUM_CONCAT * ACT_DIM))),
+                                         np.concatenate((obs_box.high, np.ones(NUM_CONCAT * ACT_DIM))))
         else:
             self.observation_space = obs_box
 
@@ -301,10 +306,9 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
                 1]  # 4 is move a bit downwards, +-2 for randomness
             oy = -tip[1] * (4 / SCALE + 2 * dispersion[0]) - side[1] * dispersion[1]
             impulse_pos = (self.lander.position[0] + ox, self.lander.position[1] + oy)
-            ### p = self._create_particle(3.5, impulse_pos[0], impulse_pos[1], ###
-                                      ### m_power)  # particles are just a decoration, 3.5 is here to make particle speed adequate ###
-            ### p.ApplyLinearImpulse((ox * MAIN_ENGINE_POWER * m_power, oy * MAIN_ENGINE_POWER * m_power), impulse_pos, ###
-                                 ### True) ###
+            if not self.fake_step:
+                p = self._create_particle(3.5, impulse_pos[0], impulse_pos[1], m_power)  # particles are just a decoration, 3.5 is here to make particle speed adequate ###
+                p.ApplyLinearImpulse((ox * MAIN_ENGINE_POWER * m_power, oy * MAIN_ENGINE_POWER * m_power), impulse_pos, True)
             self.lander.ApplyLinearImpulse((-ox * MAIN_ENGINE_POWER * m_power, -oy * MAIN_ENGINE_POWER * m_power),
                                            impulse_pos, True)
 
@@ -320,9 +324,10 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             oy = -tip[1] * dispersion[0] - side[1] * (3 * dispersion[1] + direction * SIDE_ENGINE_AWAY / SCALE)
             impulse_pos = (self.lander.position[0] + ox - tip[0] * 17 / SCALE,
                            self.lander.position[1] + oy + tip[1] * SIDE_ENGINE_HEIGHT / SCALE)
-            ### p = self._create_particle(0.7, impulse_pos[0], impulse_pos[1], s_power) ###
-            ### p.ApplyLinearImpulse((ox * SIDE_ENGINE_POWER * s_power, oy * SIDE_ENGINE_POWER * s_power), impulse_pos, ###
-                                 ### True) ###
+
+            if not self.fake_step:
+                p = self._create_particle(0.7, impulse_pos[0], impulse_pos[1], s_power)
+                p.ApplyLinearImpulse((ox * SIDE_ENGINE_POWER * s_power, oy * SIDE_ENGINE_POWER * s_power), impulse_pos, True) ###
             self.lander.ApplyLinearImpulse((-ox * SIDE_ENGINE_POWER * s_power, -oy * SIDE_ENGINE_POWER * s_power),
                                            impulse_pos, True)
 
@@ -345,8 +350,9 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         assert len(state) == OBS_DIM
 
         self.curr_step += 1
-#         self.trajectory.append(state)
-#         self.actions.append(action)
+        if not self.fake_step:
+            self.trajectory.append(state)
+            self.actions.append(action)
 
         reward = 0
         dx = (pos.x - helipad_x) / (VIEWPORT_W/SCALE/2)
@@ -368,7 +374,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             height_scale = (pos.y - self.helipad_y) / (VIEWPORT_H / SCALE)
             obs_dim = OBS_DIM
             if self.copilot:
-                obs_dim = obs_dim + ACT_DIM
+                obs_dim = obs_dim + ACT_DIM * NUM_CONCAT
             reward += self.empowerment_coeff * height_scale * self.compute_empowerment(state, obs_dim)
         timeout = self.curr_step >= MAX_NUM_STEPS
         at_site = pos.x >= self.helipad_x1 and pos.x <= self.helipad_x2
@@ -388,7 +394,10 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         state = np.array(state, dtype=np.float32)
 
         if self.copilot:
-            state = np.concatenate((state, onehot_encode(self.pilot_policy.step(state[None, :]))))
+            pilot_action = onehot_encode(self.pilot_policy.step(state[None, :]))
+            self.past_pilot_actions[ACT_DIM * 1:] = self.past_pilot_actions[:-1 * ACT_DIM]
+            self.past_pilot_actions[:ACT_DIM] = pilot_action
+            state = np.concatenate((state, self.past_pilot_actions))
 
         return state, reward, done, info
 
@@ -451,17 +460,11 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         """
         # array for the final state
         X = np.zeros((n_traj, state_dim))
-        action_variance = 0.1
         self.fake_step = True
 
-        orig_state = state
-        orig_world = self.world
-        orig_lander = self.lander
-        orig_curr_step = self.curr_step
-#         orig_trajectory = self.trajectory
-#         orig_actions = self.actions
-        orig_shaping = self.prev_shaping
-        orig_game_over = self.game_over
+        orig_curr_step = deepcopy(self.curr_step)
+        orig_shaping = deepcopy(self.prev_shaping)
+        orig_game_over = deepcopy(self.game_over)
 
         for n in range(n_traj):
             # generate an action sequence.
@@ -474,21 +477,18 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             # store the final state
             X[n, :] = x
 
-            self.world = orig_world
-            self.lander = orig_lander
-            self.curr_step = orig_curr_step
-#             self.trajectory = orig_trajectory
-#             self.actions = orig_actions
-            self.prev_shaping = orig_shaping
-            self.game_over = orig_game_over
+            self.curr_step = deepcopy(orig_curr_step)
+            self.prev_shaping = deepcopy(orig_shaping)
+            self.game_over = deepcopy(orig_game_over)
             # compute the convex hull of the final state
         # e.g., by scipy.spatial.ConvexHull
         for i in range(n_traj):
             X = X[:, ~(X == X[i,:]).all(0)]
         try:
-            ch = ConvexHull(X)
+            ch_volume = np.var(X)
+            #ch = ConvexHull(X)
             # take volume
-            ch_volume = ch.volume
+            #ch_volume = ch.volume
         except Exception as e:
             ch_volume = 0
         self.fake_step = False
