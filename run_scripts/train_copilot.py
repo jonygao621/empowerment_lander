@@ -67,17 +67,19 @@ def run_ep(policy, env, max_ep_len, render=False, pilot_is_human=False):
     outcome = r if r % 100 == 0 else 0
     return totalr, outcome, trajectory, actions
 
+
 def run_ep_copilot(policy, env, max_ep_len, pilot, pilot_tol, render=False, pilot_is_human=False):
     obs = env.reset()
     done = False
     totalr = 0.
     trajectory = None
     actions = []
+    pilot_actions = np.zeros((env.num_concat * env.act_dim))
     for step_idx in range(max_ep_len + 1):
         if done:
             trajectory = info['trajectory']
             break
-        action = policy.step(obs[None, :], pilot, pilot_tol)
+        action, pilot_actions = policy.step(obs[None, :], pilot, pilot_tol, pilot_actions)
         obs, r, done, info = env.step(action)
         actions.append(action)
         if render:
@@ -86,9 +88,10 @@ def run_ep_copilot(policy, env, max_ep_len, pilot, pilot_tol, render=False, pilo
     outcome = r if r % 100 == 0 else 0
     return totalr, outcome, trajectory, actions
 
+
 def run_experiment(empowerment):
 
-    base_dir = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
+    base_dir = os.getcwd() + '/data' # os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
     logger.configure(dir=base_dir, format_strs=['stdout', 'log', 'csv', 'tensorboard'])
 
     f = open(base_dir + "/config.txt", "w")
@@ -200,7 +203,7 @@ if __name__ == '__main__':
 
     if args.mode == 'ec2':
         if query_yes_no("Continue?"):
-            sweeper.run_sweep_ec2(run_experiment, {'empowerment':[1000.0]}, bucket_name=config.S3_BUCKET_NAME,
+            sweeper.run_sweep_ec2(run_experiment, {'empowerment':[100.0]}, bucket_name=config.S3_BUCKET_NAME,
                                   instance_type='c4.4xlarge',
                                   region='us-west-1', s3_log_name=EXP_NAME, add_date_to_logname=True)
     elif args.mode == 'local_docker':
