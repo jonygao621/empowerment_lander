@@ -73,11 +73,12 @@ def run_ep_copilot(policy, env, max_ep_len, pilot, pilot_tol, render=False, pilo
     totalr = 0.
     trajectory = None
     actions = []
+    pilot_actions = np.zeros((env.num_concat * env.act_dim))
     for step_idx in range(max_ep_len + 1):
         if done:
             trajectory = info['trajectory']
             break
-        action = policy.step(obs[None, :], pilot, pilot_tol)
+        action, pilot_actions = policy.step(obs[None, :], pilot, pilot_tol, pilot_actions)
         obs, r, done, info = env.step(action)
         actions.append(action)
         if render:
@@ -88,22 +89,15 @@ def run_ep_copilot(policy, env, max_ep_len, pilot, pilot_tol, render=False, pilo
 
 def run_experiment(empowerment):
 
-    base_dir = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
+    base_dir = os.getcwd() + '/data'
     logger.configure(dir=base_dir, format_strs=['stdout', 'log', 'csv', 'tensorboard'])
-
-    f = open(base_dir + "/config.txt", "w")
-    f.write("Empowerment: {}".format(empowerment))
-    f.write("Num concat: 20")
-    f.close()
 
     max_ep_len = 1000
     n_training_episodes = 500
 
     env = LunarLanderEmpowerment(empowerment=0.0, ac_continuous=False)
 
-    max_timesteps = max_ep_len * n_training_episodes
-    full_pilot_policy = FullPilotPolicy(base_dir)
-    full_pilot_policy.learn(env, max_timesteps)
+    full_pilot_policy = FullPilotPolicy(base_dir, policy_path="data/2020-01-22-CopilotTraining/2020_01_22_CopilotTraining-1579714196060/full_pilot_policy.pkl")
     laggy_pilot_policy = LaggyPilotPolicy(base_dir, full_policy=full_pilot_policy.policy)
     noisy_pilot_policy = NoisyPilotPolicy(base_dir, full_policy=full_pilot_policy.policy)
     noop_pilot_policy = NoopPilotPolicy(base_dir, full_policy=full_pilot_policy.policy)
@@ -111,7 +105,7 @@ def run_experiment(empowerment):
     sim_pilots = [full_pilot_policy, laggy_pilot_policy, noisy_pilot_policy, noop_pilot_policy, sensor_pilot_policy]
 
     pilot_names = ['full', 'laggy', 'noisy', 'noop', 'sensor']
-    n_eval_eps = 100
+    n_eval_eps = 1
 
     pilot_evals = [
         list(zip(*[run_ep(sim_policy, env, render=False, max_ep_len=max_ep_len) for _ in
@@ -130,51 +124,16 @@ def run_experiment(empowerment):
         'sensor': 0
     }
 
-    copilot_of_training_pilot = {}
+    noop_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-22-CopilotTraining/2020_01_22_CopilotTraining-1579714196060/co_deepq_laggy_policy.pkl')
+    for eval_pilot_id, eval_pilot_tol in pilot_tol_of_id.items():
+        eval_pilot_policy = eval('%s_pilot_policy' % eval_pilot_id)
+        copilot_policy = noop_copilot_policy
 
-    for training_pilot_id, training_pilot_tol in pilot_tol_of_id.items():
-        training_pilot_policy = eval('%s_pilot_policy' % training_pilot_id)
-        config_kwargs = {
-            'pilot_policy': training_pilot_policy,
-            'pilot_tol': training_pilot_tol,
-            'reuse': True,
-            'copilot_scope': 'co_deepq_' + training_pilot_id
-        }
-        print(training_pilot_id)
-        co_env = LunarLanderEmpowerment(empowerment=empowerment, ac_continuous=False, **config_kwargs)
-        copilot_policy = CoPilotPolicy(base_dir)
-        copilot_policy.learn(co_env, max_timesteps=max_ep_len * n_training_episodes, **config_kwargs)
-        copilot_of_training_pilot[training_pilot_id] = copilot_policy
+        co_env_eval = LunarLanderEmpowerment(empowerment=empowerment, ac_continuous=False,
+                                             pilot_policy=eval_pilot_policy)
 
-    cross_evals={}
-
-    for training_pilot_id, training_pilot_tol in pilot_tol_of_id.items():
-        # load pretrained copilot
-        training_pilot_policy = eval('%s_pilot_policy' % training_pilot_id)
-        config_kwargs = {
-            'pilot_policy': training_pilot_policy,
-            'pilot_tol': training_pilot_tol,
-            'reuse': True
-        }
-
-        # evaluate copilot with different pilots
-        for eval_pilot_id, eval_pilot_tol in pilot_tol_of_id.items():
-            eval_pilot_policy = eval('%s_pilot_policy' % eval_pilot_id)
-            copilot_policy = copilot_of_training_pilot[training_pilot_id]
-
-            co_env_eval = LunarLanderEmpowerment(empowerment=empowerment, ac_continuous=False, pilot_policy=eval_pilot_policy)
-            cross_evals[(training_pilot_id, eval_pilot_id)] = list(zip(*[run_ep_copilot(copilot_policy, co_env_eval, pilot=eval_pilot_policy, pilot_tol=eval_pilot_tol, render=False, max_ep_len=max_ep_len)[:2] for _ in
-                                                               range(n_eval_eps)]))
-
-    for key, value in cross_evals.items():
-        mean_rewards = np.mean(value[0])
-        outcome_distrns = Counter(value[1])
-
-        print('\n Training pilot: {}, eval pilot: {}'.format(key[0], key[1]))
-        print('Mean reward: ' + str(mean_rewards))
-        print('Outcome distribution: '+ str(outcome_distrns))
-    print(cross_evals)
-
+        run_ep_copilot(copilot_policy, co_env_eval, pilot=eval_pilot_policy, pilot_tol=eval_pilot_tol, render=True,
+                           max_ep_len=max_ep_len)
 
 
 if __name__ == '__main__':
@@ -190,24 +149,4 @@ if __name__ == '__main__':
                         help='Empowerment coefficient')
     args = parser.parse_args()
 
-    local_mount = mount.MountLocal(local_dir=config.BASE_DIR, pythonpath=True)
-    docker_mount_point = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
-
-    sweeper = launcher.DoodadSweeper([local_mount], docker_img=config.DOCKER_IMAGE,
-                                     docker_output_dir=docker_mount_point,
-                                     local_output_dir=os.path.join(config.DATA_DIR, 'local', EXP_NAME))
-    sweeper.mount_out_s3 = mount.MountS3(s3_path='', mount_point=docker_mount_point, output=True)
-
-    if args.mode == 'ec2':
-        if query_yes_no("Continue?"):
-            sweeper.run_sweep_ec2(run_experiment, {'empowerment':[1000.0]}, bucket_name=config.S3_BUCKET_NAME,
-                                  instance_type='c4.4xlarge',
-                                  region='us-west-1', s3_log_name=EXP_NAME, add_date_to_logname=True)
-    elif args.mode == 'local_docker':
-            mode_docker = dd.mode.LocalDocker(
-                image=sweeper.image,
-            )
-            run_sweep_doodad(run_experiment, {'empowerment':[100.0]}, run_mode=mode_docker,
-                             mounts=sweeper.mounts)
-    else:
-        run_experiment(empowerment=args.empowerment)
+    run_experiment(empowerment=args.empowerment)

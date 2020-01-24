@@ -72,7 +72,7 @@ SIDE_ENGINE_AWAY = 12.0
 VIEWPORT_W = 600
 VIEWPORT_H = 400
 
-NUM_CONCAT = 5
+NUM_CONCAT = 20
 
 
 class ContactDetector(contactListener):
@@ -105,7 +105,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         EzPickle.__init__(self, empowerment, ac_continuous)
         self.seed()
         self.viewer = None
-
+        self.num_concat = NUM_CONCAT
+        self.act_dim = ACT_DIM
         self.world = Box2D.b2World()
         self.moon = None
         self.lander = None
@@ -462,6 +463,21 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         X = np.zeros((n_traj, state_dim))
         self.fake_step = True
 
+        lander_pos = (self.lander.position.x, self.lander.position.y)
+        lander_ang_vel = self.lander.angularVelocity
+        lander_lin_vel = (self.lander.linearVelocity.x, self.lander.linearVelocity.y)
+        lander_angle = self.lander.angle
+
+        leg_pos = []
+        leg_joint = []
+        for leg in self.legs:
+            leg_pos.append((leg.position.x, leg.position.y))
+            leg_joint.append(leg.joint)
+
+        particle_pos = []
+        for particle in self.particles:
+            particle_pos.append((particle.position.x, particle.position.y))
+
         orig_curr_step = deepcopy(self.curr_step)
         orig_shaping = deepcopy(self.prev_shaping)
         orig_game_over = deepcopy(self.game_over)
@@ -477,6 +493,17 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             # store the final state
             X[n, :] = x
 
+            for pos, joint, leg in zip(leg_pos,leg_joint,self.legs):
+                leg.position = pos
+                leg.joint = joint
+
+            for pos, particle in zip(particle_pos, self.particles):
+                particle.position = pos
+
+            self.lander.position = lander_pos
+            self.lander.angularVelocity = lander_ang_vel
+            self.lander.linearVelocity = lander_lin_vel
+            self.lander.angle = lander_angle
             self.curr_step = deepcopy(orig_curr_step)
             self.prev_shaping = deepcopy(orig_shaping)
             self.game_over = deepcopy(orig_game_over)

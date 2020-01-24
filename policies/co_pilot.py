@@ -10,6 +10,8 @@ from baselines import logger
 from baselines.common.schedules import LinearSchedule
 from baselines.common import set_global_seeds
 
+import time
+
 from baselines import deepq
 from baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from baselines.deepq.utils import ObservationInput
@@ -22,6 +24,79 @@ from policies.co_build_graph import *
 from utils.env_utils import *
 
 import uuid
+import cloudpickle
+import zipfile
+
+class CoActWrapper(object):
+    def __init__(self, act, act_params):
+        self._act = act
+        self._act_params = act_params
+        self.initial_state = None
+
+    @staticmethod
+    def load_act(path, scope):
+        with open(path, "rb") as f:
+            model_data, act_params = cloudpickle.load(f)
+        act = co_build_act(**act_params, scope=scope)
+        sess = tf.Session()
+        sess.__enter__()
+        with tempfile.TemporaryDirectory() as td:
+            arc_path = os.path.join(td, "packed.zip")
+            with open(arc_path, "wb") as f:
+                f.write(model_data)
+
+            zipfile.ZipFile(arc_path, 'r', zipfile.ZIP_DEFLATED).extractall(td)
+            load_variables(os.path.join(td, "model"))
+
+        return ActWrapper(act, act_params)
+
+    def __call__(self, *args, **kwargs):
+        return self._act(*args, **kwargs)
+
+    def step(self, observation, **kwargs):
+        # DQN doesn't use RNNs so we ignore states and masks
+        kwargs.pop('S', None)
+        kwargs.pop('M', None)
+        return self._act([observation], **kwargs), None, None, None
+
+    def save_act(self, path=None):
+        """Save model to a pickle located at `path`"""
+        if path is None:
+            path = os.path.join(logger.get_dir(), "model.pkl")
+
+        with tempfile.TemporaryDirectory() as td:
+            save_variables(os.path.join(td, "model"))
+            arc_name = os.path.join(td, "packed.zip")
+            with zipfile.ZipFile(arc_name, 'w') as zipf:
+                for root, dirs, files in os.walk(td):
+                    for fname in files:
+                        file_path = os.path.join(root, fname)
+                        if file_path != arc_name:
+                            zipf.write(file_path, os.path.relpath(file_path, td))
+            with open(arc_name, "rb") as f:
+                model_data = f.read()
+        with open(path, "wb") as f:
+            cloudpickle.dump((model_data, self._act_params), f)
+
+    def save(self, path):
+        save_variables(path)
+
+
+def load_act(path, scope):
+    """Load act function that was returned by learn function.
+
+    Parameters
+    ----------
+    path: str
+        path to the act function pickle
+
+    Returns
+    -------
+    act: ActWrapper
+        function that takes a batch of observations
+        and returns actions.
+    """
+    return CoActWrapper.load_act(path,scope)
 
 def learn(
         env,
@@ -212,7 +287,7 @@ def learn(
     }
 
     return act, reward_data
-
+ACT_DIM = 6
 class CoPilotPolicy(object):
     def __init__(self, data_dir, policy_path=None):
         self.policy = None
@@ -220,7 +295,10 @@ class CoPilotPolicy(object):
         self.data_dir = data_dir
         self.scope=None
         if policy_path is not None:
-            self.policy = deepq.deepq.load_act(policy_path)
+            scope = os.path.basename(policy_path)
+            scope = scope.split("_policy")
+            self.scope = scope[0]
+            self.policy = load_act(policy_path, self.scope)
 
     def learn(self, env, max_timesteps, copilot_scope='co_deepq', pilot_tol=0, reuse=False, **extras):
 
@@ -244,19 +322,20 @@ class CoPilotPolicy(object):
         self.policy_path = self.data_dir + '/' + self.scope + '_policy.pkl'
         self.policy.save_act(path=self.policy_path)
 
-    def step(self, observation, pilot_policy, pilot_tol, **kwargs):
+    def step(self, observation, pilot_policy, pilot_tol, pilot_actions):
         with tf.variable_scope(self.scope, reuse=None):
-            masked_obs = mask_helipad(observation)[0]
-            pilot_action = pilot_policy.step(masked_obs[None, :9])
+            lander_obs = np.squeeze(observation)[:9]
+            masked_obs = mask_helipad(lander_obs)
+            pilot_action = onehot_encode(pilot_policy.step(lander_obs[None, :])) #pilot knows where goal is
 
-            if masked_obs.size == 9:
-                feed_obs = np.concatenate((masked_obs, onehot_encode(pilot_action)))
-            else:
-                feed_obs = masked_obs
+            pilot_actions[ACT_DIM * 1:] = pilot_actions[:-1 * ACT_DIM]
+            pilot_actions[:ACT_DIM] = pilot_action
+
+            feed_obs = np.concatenate((masked_obs, pilot_actions))
 
             return self.policy._act(
                 feed_obs[None, :],
                 pilot_tol=pilot_tol,
-                pilot_action=pilot_action
-            )[0][0]
+                pilot_action=onehot_decode(pilot_action)
+            )[0][0], pilot_actions
 
