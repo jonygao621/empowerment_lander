@@ -1,6 +1,8 @@
 import numpy as np
 from baselines import deepq
 import os
+from utils.env_utils import *
+import tensorflow as tf
 
 class FullPilotPolicy(object):
     def __init__(self, data_dir, policy_path=None):
@@ -23,5 +25,6 @@ class FullPilotPolicy(object):
         self.policy.save_act(path=self.policy_path)
 
     def step(self, observation):
-        return self.policy._act(observation)[0]
+        with tf.variable_scope('deepq', reuse=None):
+            return self.policy._act(observation)[0]
 

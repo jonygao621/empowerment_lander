@@ -91,7 +91,7 @@ def run_ep_copilot(policy, env, max_ep_len, pilot, pilot_tol, render=False, pilo
 
 def run_experiment(empowerment):
 
-    base_dir = os.getcwd() + '/data' # os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
+    base_dir = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
     logger.configure(dir=base_dir, format_strs=['stdout', 'log', 'csv', 'tensorboard'])
 
     f = open(base_dir + "/config.txt", "w")
@@ -203,8 +203,8 @@ if __name__ == '__main__':
 
     if args.mode == 'ec2':
         if query_yes_no("Continue?"):
-            sweeper.run_sweep_ec2(run_experiment, {'empowerment':[100.0]}, bucket_name=config.S3_BUCKET_NAME,
-                                  instance_type='c4.4xlarge',
+            sweeper.run_sweep_ec2(run_experiment, {'empowerment':[0]}, bucket_name=config.S3_BUCKET_NAME,
+                                  instance_type='c4.8xlarge',
                                   region='us-west-1', s3_log_name=EXP_NAME, add_date_to_logname=True)
     elif args.mode == 'local_docker':
             mode_docker = dd.mode.LocalDocker(

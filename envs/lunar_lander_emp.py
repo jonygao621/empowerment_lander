@@ -374,19 +374,17 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         if self.empowerment_coeff > 0 and not self.fake_step:
             height_scale = (pos.y - self.helipad_y) / (VIEWPORT_H / SCALE)
             obs_dim = OBS_DIM
-            if self.copilot:
-                obs_dim = obs_dim + ACT_DIM * NUM_CONCAT
-            reward += self.empowerment_coeff * height_scale * self.compute_empowerment(state, obs_dim)
+            emp = self.compute_empowerment(state, obs_dim)
+            reward += self.empowerment_coeff * height_scale * emp
         timeout = self.curr_step >= MAX_NUM_STEPS
-        at_site = pos.x >= self.helipad_x1 and pos.x <= self.helipad_x2
+        at_site = pos.x >= self.helipad_x1 and pos.x <= self.helipad_x2 and self.legs[0].ground_contact and self.legs[1].ground_contact
 
-        done = self.game_over or abs(state[0]) >= 1.0 or timeout or not self.lander.awake
+        done = self.game_over or abs(state[0]) >= 1.0 or timeout or not self.lander.awake or at_site
         if done:
             if self.game_over or abs(state[0]) >= 1.0 or timeout:
                 reward = -100
             elif at_site:
                 reward = +100
-
         info = {}
         if done:
             info['trajectory'] = self.trajectory
@@ -394,7 +392,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
 
         state = np.array(state, dtype=np.float32)
 
-        if self.copilot:
+        if self.copilot and not self.fake_step:
             pilot_action = onehot_encode(self.pilot_policy.step(state[None, :]))
             self.past_pilot_actions[ACT_DIM * 1:] = self.past_pilot_actions[:-1 * ACT_DIM]
             self.past_pilot_actions[:ACT_DIM] = pilot_action
@@ -448,7 +446,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.viewer.close()
             self.viewer = None
 
-    def compute_empowerment(self, state, state_dim, horizon=5, n_traj=10):
+    def compute_empowerment(self, state, state_dim, horizon=5, n_traj=5):
         """
         Estimate empowerment using a convex hull approximation.
 
@@ -509,10 +507,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.game_over = deepcopy(orig_game_over)
             # compute the convex hull of the final state
         # e.g., by scipy.spatial.ConvexHull
-        for i in range(n_traj):
-            X = X[:, ~(X == X[i,:]).all(0)]
         try:
-            ch_volume = np.var(X)
+            ch_volume = np.var(X[:,:2])
             #ch = ConvexHull(X)
             # take volume
             #ch_volume = ch.volume

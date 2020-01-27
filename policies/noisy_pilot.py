@@ -1,5 +1,6 @@
 import numpy as np
 from baselines import deepq
+import tensorflow as tf
 
 class NoisyPilotPolicy(object):
     def __init__(self, full_policy_path=None, full_policy=None):
@@ -10,9 +11,11 @@ class NoisyPilotPolicy(object):
             raise NotImplementedError
 
     def step(self, obs, noise_prob=0.15):
-        action = self.full_policy._act(obs)[0]
-        if np.random.random() < noise_prob:
-            action = (action + 3) % 6 #thuster on / off
-            action = action // 3 * 3 + (action + np.random.randint(1, 3)) % 3
+        with tf.variable_scope("deepq", reuse=None):
 
-        return action
+            action = self.full_policy._act(obs)[0]
+            if np.random.random() < noise_prob:
+                action = (action + 3) % 6 #thuster on / off
+                action = action // 3 * 3 + (action + np.random.randint(1, 3)) % 3
+
+            return action
