@@ -362,9 +362,10 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
 
         # TODO: add option to remove shaping if necessary
         shaping = \
-            - 100 * np.sqrt(state[2] * state[2] + state[3] * state[3]) - 100 * abs(state[4]) + 10 * state[6] + 10 * state[7]
-            #-100 * np.sqrt(dx * dx + state[1] * state[1]) # And ten points for legs contact, the idea is if you
+            - 100 * np.sqrt(state[2] * state[2] + state[3] * state[3]) - 100 * abs(state[4]) + 10 * state[6] + 10 * state[7]# And ten points for legs contact, the idea is if you
         # lose contact again after landing, you get negative reward
+        if not self.copilot:
+            shaping = shaping -100 * np.sqrt(dx * dx + state[1] * state[1])  #only if we're the pilot do we know where the goal is
         if self.prev_shaping is not None:
             reward = shaping - self.prev_shaping
         self.prev_shaping = shaping
