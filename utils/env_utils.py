@@ -48,3 +48,6 @@ def onehot_decode(x):
     l = np.nonzero(x)[0]
     assert len(l) == 1
     return l[0]
+
+def init_human_action():
+    return [0,1] #no action

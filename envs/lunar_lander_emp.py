@@ -101,7 +101,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
 
     continuous = False
 
-    def __init__(self, empowerment, ac_continuous=True, pilot_policy=None, **extras):
+    def __init__(self, empowerment, ac_continuous=True, pilot_policy=None, pilot_is_human=False, **extras):
         EzPickle.__init__(self, empowerment, ac_continuous)
         self.seed()
         self.viewer = None
@@ -111,7 +111,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         self.moon = None
         self.lander = None
         self.particles = []
-
+        self.pilot_is_human = pilot_is_human
         self.prev_reward = None
 
         self.continuous = ac_continuous
@@ -173,6 +173,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         self.curr_step = 0
         self.actions = []
         self.trajectory = []
+        self.num_steps_at_site = 0
+        self.prev_at_site = False
 
         W = VIEWPORT_W / SCALE
         H = VIEWPORT_H / SCALE
@@ -360,8 +362,8 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
 
         # TODO: add option to remove shaping if necessary
         shaping = \
-            - 100 * np.sqrt(state[2] * state[2] + state[3] * state[3]) - 100 * abs(state[4]) \
-            -100 * np.sqrt(dx * dx + state[1] * state[1]) + 10 * state[6] + 10 * state[7]# And ten points for legs contact, the idea is if you
+            - 100 * np.sqrt(state[2] * state[2] + state[3] * state[3]) - 100 * abs(state[4]) + 10 * state[6] + 10 * state[7]
+            #-100 * np.sqrt(dx * dx + state[1] * state[1]) # And ten points for legs contact, the idea is if you
         # lose contact again after landing, you get negative reward
         if self.prev_shaping is not None:
             reward = shaping - self.prev_shaping
@@ -371,15 +373,21 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         reward -= s_power * 0.03
 
         ## Empowerment
-        if self.empowerment_coeff > 0 and not self.fake_step:
-            height_scale = (pos.y - self.helipad_y) / (VIEWPORT_H / SCALE)
+        if self.empowerment_coeff > 0 and not self.fake_step:# and not(self.legs[0].ground_contact and self.legs[1].ground_contact):
+            height_scale = 1#(pos.y - self.helipad_y) / (VIEWPORT_H / SCALE)
             obs_dim = OBS_DIM
             emp = self.compute_empowerment(state, obs_dim)
             reward += self.empowerment_coeff * height_scale * emp
         timeout = self.curr_step >= MAX_NUM_STEPS
         at_site = pos.x >= self.helipad_x1 and pos.x <= self.helipad_x2 and self.legs[0].ground_contact and self.legs[1].ground_contact
 
-        done = self.game_over or abs(state[0]) >= 1.0 or timeout or not self.lander.awake or at_site
+        if at_site:
+            self.num_steps_at_site += 1
+        else:
+            self.num_steps_at_site = 0
+
+
+        done = self.game_over or abs(state[0]) >= 1.0 or timeout or not self.lander.awake or self.num_steps_at_site > 3
         if done:
             if self.game_over or abs(state[0]) >= 1.0 or timeout:
                 reward = -100
@@ -393,7 +401,10 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         state = np.array(state, dtype=np.float32)
 
         if self.copilot and not self.fake_step:
-            pilot_action = onehot_encode(self.pilot_policy.step(state[None, :]))
+            if self.pilot_is_human:
+                pilot_action = onehot_encode(self.pilot_policy(state[None,:]))
+            else:
+                pilot_action = onehot_encode(self.pilot_policy.step(state[None, :]))
             self.past_pilot_actions[ACT_DIM * 1:] = self.past_pilot_actions[:-1 * ACT_DIM]
             self.past_pilot_actions[:ACT_DIM] = pilot_action
             state = np.concatenate((state, self.past_pilot_actions))
@@ -446,10 +457,9 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.viewer.close()
             self.viewer = None
 
-    def compute_empowerment(self, state, state_dim, horizon=5, n_traj=5):
+    def compute_empowerment(self, state, state_dim, horizon=10, n_traj=5):
         """
         Estimate empowerment using a convex hull approximation.
-
         :param env: Environment
         :param state: State from which to compute empowerment
         :param state_dim: dimension of state space
@@ -479,6 +489,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         orig_curr_step = deepcopy(self.curr_step)
         orig_shaping = deepcopy(self.prev_shaping)
         orig_game_over = deepcopy(self.game_over)
+        num_steps_at_site = deepcopy(self.num_steps_at_site)
 
         for n in range(n_traj):
             # generate an action sequence.
@@ -505,6 +516,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.curr_step = deepcopy(orig_curr_step)
             self.prev_shaping = deepcopy(orig_shaping)
             self.game_over = deepcopy(orig_game_over)
+            self.num_steps_at_site = deepcopy(num_steps_at_site)
             # compute the convex hull of the final state
         # e.g., by scipy.spatial.ConvexHull
         try:
@@ -515,5 +527,6 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         except Exception as e:
             ch_volume = 0
         self.fake_step = False
+        print(ch_volume,"empowerment")
         return ch_volume
 

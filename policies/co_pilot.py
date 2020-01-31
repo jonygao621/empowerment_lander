@@ -142,6 +142,12 @@ def learn(
 
     using_control_sharing = True #pilot_tol > 0
 
+    if pilot_is_human:
+        global human_agent_action
+        global human_agent_active
+        human_agent_action = init_human_action()
+        human_agent_active = False
+
     act, train, update_target, debug = co_build_train(
         scope=scope,
         make_obs_ph=make_obs_ph,
@@ -211,7 +217,7 @@ def learn(
             act_kwargs = {}
             if using_control_sharing:
                 act_kwargs['pilot_action'] = env.unwrapped.pilot_policy.step(obs[None, :9])
-                act_kwargs['pilot_tol'] = pilot_tol
+                act_kwargs['pilot_tol'] = pilot_tol if not pilot_is_human or (pilot_is_human and human_agent_active) else 0
             else:
                 act_kwargs['update_eps'] = exploration.value(t)
 
@@ -220,6 +226,10 @@ def learn(
             env_action = action
             reset = False
             new_obs, rew, done, info = env.step(env_action)
+
+            if pilot_is_human:
+                env.render()
+
             # Store transition in the replay buffer.
             masked_new_obs = mask_helipad(new_obs)
             replay_buffer.add(masked_obs, action, rew, masked_new_obs, float(done))
@@ -230,6 +240,14 @@ def learn(
                 obs = env.reset()
                 episode_rewards.append(0.0)
                 reset = True
+
+                if pilot_is_human:
+#                    global human_agent_action
+#                    global human_agent_active
+                    human_agent_action = init_human_action()
+                    human_agent_active = False
+                    time.sleep(2)
+
 
             if t > learning_starts and t % train_freq == 0:
                 if prioritized_replay:
@@ -300,7 +318,7 @@ class CoPilotPolicy(object):
             self.scope = scope[0]
             self.policy = load_act(policy_path, self.scope)
 
-    def learn(self, env, max_timesteps, copilot_scope='co_deepq', pilot_tol=0, reuse=False, **extras):
+    def learn(self, env, max_timesteps, copilot_scope='co_deepq', pilot_tol=0, pilot_is_human=False, **extras):
 
         if copilot_scope is not None:
             scope = copilot_scope
@@ -316,17 +334,21 @@ class CoPilotPolicy(object):
             reuse=False,
             lr=1e-3,
             target_network_update_freq=500,
+            pilot_is_human=pilot_is_human,
             gamma=0.99
         )
 
         self.policy_path = self.data_dir + '/' + self.scope + '_policy.pkl'
         self.policy.save_act(path=self.policy_path)
 
-    def step(self, observation, pilot_policy, pilot_tol, pilot_actions):
+    def step(self, observation, pilot_policy, pilot_tol, pilot_actions, pilot_is_human=False):
         with tf.variable_scope(self.scope, reuse=None):
             lander_obs = np.squeeze(observation)[:9]
             masked_obs = mask_helipad(lander_obs)
-            pilot_action = onehot_encode(pilot_policy.step(lander_obs[None, :])) #pilot knows where goal is
+            if pilot_is_human:
+                pilot_action = onehot_encode(pilot_policy(lander_obs[None, :]))  # pilot knows where goal is
+            else:
+                pilot_action = onehot_encode(pilot_policy.step(lander_obs[None, :])) #pilot knows where goal is
 
             pilot_actions[ACT_DIM * 1:] = pilot_actions[:-1 * ACT_DIM]
             pilot_actions[:ACT_DIM] = pilot_action
