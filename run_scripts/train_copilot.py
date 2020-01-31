@@ -197,7 +197,11 @@ if __name__ == '__main__':
     #                    help='Number of threads to use for running experiments')
     parser.add_argument('--empowerment', type=float, default=100.0,
                         help='Empowerment coefficient')
+    parser.add_argument('--seed', type=int, default=1, help='Seed')
     args = parser.parse_args()
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    tf.set_random_seed(args.seed)
 
     # local_mount = mount.MountLocal(local_dir=config.BASE_DIR, pythonpath=True)
     # docker_mount_point = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
@@ -220,4 +224,4 @@ if __name__ == '__main__':
     #                          mounts=sweeper.mounts)
     # else:
     #
-    run_experiment(empowerment=args.empowerment, exp_title=args.exp_title)
+    run_experiment(empowerment=args.empowerment, exp_title=args.exp_title + '_' + str(args.seed))
