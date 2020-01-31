@@ -127,8 +127,9 @@ def run_experiment(empowerment):
     #noop_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320934553/co_deepq_noop_policy.pkl')
     #noisy_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-27-CopilotTraining/2020_01_27_CopilotTraining-1580170302662/co_deepq_noisy_policy.pkl')
     #laggy_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320934553/co_deepq_laggy_policy.pkl')
-    sensor_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320934553/co_deepq_sensor_policy.pkl')
-    #sensor_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-28-CopilotTraining/2020_01_28_CopilotTraining-1580235149954/co_deepq_sensor_policy.pkl')
+    #sensor_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320942322/co_deepq_sensor_policy.pkl')
+    sensor_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-28-CopilotTraining/2020_01_28_CopilotTraining-1580235149954/co_deepq_sensor_policy.pkl')
+    #sensor_copilot_policy = CoPilotPolicy(base_dir, policy_path='data/2020-01-27-CopilotTraining/2020_01_27_CopilotTraining-1580170302662/co_deepq_sensor_policy.pkl')
 
     copilot_of_training_pilot = {
      #   'noop' : noop_copilot_policy,

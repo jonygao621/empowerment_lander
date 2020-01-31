@@ -458,7 +458,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             self.viewer.close()
             self.viewer = None
 
-    def compute_empowerment(self, state, state_dim, horizon=10, n_traj=5):
+    def compute_empowerment(self, state, state_dim, horizon=5, n_traj=10):
         """
         Estimate empowerment using a convex hull approximation.
         :param env: Environment
