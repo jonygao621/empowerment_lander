@@ -10,7 +10,7 @@ class NoisyPilotPolicy(object):
         elif full_policy is None and self.full_policy is None:
             raise NotImplementedError
 
-    def step(self, obs, noise_prob=0.15):
+    def step(self, obs, noise_prob=0.35):
         with tf.variable_scope("deepq", reuse=None):
 
             action = self.full_policy._act(obs)[0]

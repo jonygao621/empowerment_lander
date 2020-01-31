@@ -131,8 +131,8 @@ def run_experiment(empowerment, exp_title):
 
     pilot_tol_of_id = {
         'noop': 0,
-        'laggy': 0.7,
-        'noisy': 0.4,
+        'laggy': 0.6,
+        'noisy': 0.3,
         'sensor': 0.1
     }
 
