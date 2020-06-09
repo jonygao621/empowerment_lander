@@ -73,31 +73,6 @@ def run_ep(policy, env, max_ep_len, render=False, pilot_is_human=False):
     return totalr, outcome, trajectory, actions
 
 
-def run_ep_copilot(policy, env, max_ep_len, pilot, pilot_tol, render=False, pilot_is_human=False):
-    if pilot_is_human:
-        global human_agent_action
-        global human_agent_active
-        human_agent_action = init_human_action()
-        human_agent_active = False
-    obs = env.reset()
-    done = False
-    totalr = 0.
-    trajectory = None
-    actions = []
-    pilot_actions = np.zeros((env.num_concat * env.act_dim))
-    for step_idx in range(max_ep_len + 1):
-        if done:
-            trajectory = info['trajectory']
-            break
-        action, pilot_actions = policy.step(obs[None, :], pilot, pilot_tol, pilot_actions, pilot_is_human=pilot_is_human)
-        obs, r, done, info = env.step(action)
-        actions.append(action)
-        if render:
-            env.render()
-        totalr += r
-    outcome = r if r % 100 == 0 else 0
-    return totalr, outcome, trajectory, actions
-
 LEFT = pygkey.LEFT
 RIGHT = pygkey.RIGHT
 UP = pygkey.UP
@@ -142,42 +117,22 @@ def human_pilot_policy(obs):
 def run_test(base_dir, copilot, empowerment, scope):
 
     max_ep_len = 500
-    n_training_episodes = 6
+    n_training_episodes = 50
 
-    if copilot:
-
-        co_env = LunarLanderEmpowerment(empowerment=empowerment, ac_continuous=False, pilot_policy=human_pilot_policy, pilot_is_human=True)
-        co_env.render()
-        co_env.unwrapped.viewer.window.on_key_press = key_press
-        co_env.unwrapped.viewer.window.on_key_release = key_release
-        copilot_policy = CoPilotPolicy(base_dir)
-        copilot_policy.learn(co_env, max_timesteps=max_ep_len * n_training_episodes, pilot=human_pilot_policy, pilot_is_human=True, pilot_tol=0.2, copilot_scope=scope)
-        co_env.close()
-
-        rew = copilot_policy.reward_data
-
-        mean_rewards = np.mean(rew['rewards'])
-        outcome = [r if r % 100 == 0 else 0 for r in rew['outcomes']]
-        outcome_distrns = Counter(outcome)
-
-
-
-    else:
-
-        env = LunarLanderEmpowerment(empowerment=0.0, ac_continuous=False, pilot_is_human=True)
-        env.render()
-        env.unwrapped.viewer.window.on_key_press = key_press
-        env.unwrapped.viewer.window.on_key_release = key_release
-        outcomes = []
-        rews = []
-        for _ in range(n_training_episodes * 4):
+    env = LunarLanderEmpowerment(empowerment=0.0, ac_continuous=False, pilot_is_human=True)
+    env.render()
+    env.unwrapped.viewer.window.on_key_press = key_press
+    env.unwrapped.viewer.window.on_key_release = key_release
+    outcomes = []
+    rews = []
+    for _ in range(n_training_episodes * 4):
             rew, outcome, _, __ = run_ep(human_pilot_policy, env, render=True, max_ep_len=max_ep_len, pilot_is_human=True)
             rews.append(rew)
             outcomes.append(outcome)
 
-        mean_rewards = np.mean(rews)
-        outcome_distrns = Counter(outcomes)
-        env.close()
+    mean_rewards = np.mean(rews)
+    outcome_distrns = Counter(outcomes)
+    env.close()
 
     f = open(base_dir + "/result_" + scope + ".txt", "w")
     f.write("Empowerment: {}\n".format(empowerment))
@@ -188,40 +143,14 @@ def run_test(base_dir, copilot, empowerment, scope):
 
     return
 
-def run_experiment(empowerment, human_name, trial_type):
-    base_dir = os.getcwd() + '/data/human_' + human_name
+def run_experiment():
+    base_dir = os.getcwd() + '/data/human_solo'
     logger.configure(dir=base_dir, format_strs=['stdout', 'log', 'csv', 'tensorboard'])
 
-    max_ep_len = 500
-    n_training_episodes = 7
+    time.sleep(10)
     start = time.time()
 
-    env = LunarLanderEmpowerment(empowerment=0.0, ac_continuous=False)
-    env.render()
-    env.unwrapped.viewer.window.on_key_press = key_press
-    env.unwrapped.viewer.window.on_key_release = key_release
-
-    time.sleep(10)
-    intro_rollouts = []
-    for _ in range(20):
-        intro_rollouts.append(run_ep(human_pilot_policy, env, render=True, max_ep_len=max_ep_len, pilot_is_human=True))
-
-    env.close()
-
-    if trial_type:
-        run_test(base_dir, copilot=True, empowerment=0.001, scope='emp1')
-        run_test(base_dir, copilot=True, empowerment=0.0, scope='noemp1')
-        run_test(base_dir, copilot=False, empowerment=0.0, scope='nocopilot1')
-        run_test(base_dir, copilot=True, empowerment=0.001, scope='emp2')
-        run_test(base_dir, copilot=True, empowerment=0.0, scope='noemp2')
-        run_test(base_dir, copilot=False, empowerment=0.0, scope='nocopilot2')
-    else:
-        run_test(base_dir,  copilot=True,empowerment=0.0, scope='noemp1')
-        run_test(base_dir, copilot=True, empowerment=0.001, scope='emp1')
-        run_test(base_dir, copilot=False, empowerment=0.0, scope='nocopilot1')
-        run_test(base_dir, copilot=True, empowerment=0.0, scope='noemp2')
-        run_test(base_dir,  copilot=True, empowerment=0.001, scope='emp2')
-        run_test(base_dir, copilot=False, empowerment=0.0, scope='nocopilot2')
+    run_test(base_dir, copilot=False, empowerment=0.0, scope='nocopilot1')
 
     print(time.time() - start, "Total time taken")
 
@@ -236,4 +165,4 @@ if __name__ == '__main__':
                         help='Empowerment coefficient')
     args = parser.parse_args()
 
-    run_experiment(empowerment=args.empowerment, human_name=args.name, trial_type=args.trial_type)
+    run_experiment()

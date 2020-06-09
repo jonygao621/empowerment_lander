@@ -1,6 +1,9 @@
 import numpy as np
 from copy import copy
 
+human_agent_action = None
+human_agent_active = False
+
 def disc_to_cont(action):
     # Discrete action space:
     #0 - right only
@@ -51,3 +54,4 @@ def onehot_decode(x):
 
 def init_human_action():
     return [0,1] #no action
+

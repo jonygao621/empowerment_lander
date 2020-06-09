@@ -23,24 +23,12 @@ def co_build_act(make_obs_ph, q_func, num_actions, scope="co_deepq", reuse=None,
     pi_act_idxes = tf.concat([batch_idxes, tf.reshape(pi_actions, [batch_size, 1])], axis=1)
     pi_act_q_values = tf.gather_nd(q_values, pi_act_idxes) #q values of actions taken by pilot
 
-    # if necessary, switch steering and keep main
-    #mixed_actions = 3 * (pi_actions // 3) + (opt_actions % 3)
-    #mixed_act_idxes = tf.concat([batch_idxes, tf.reshape(mixed_actions, [batch_size, 1])], axis=1)
-    #mixed_act_q_values = tf.gather_nd(q_values, mixed_act_idxes)
-
-    #mixed_actions = tf.where(pi_act_q_values >= (1 - pilot_tol_ph) * opt_q_values, pi_actions, mixed_actions)
-
-      # if necessary, keep steering and switch main
-    #mixed_act_idxes = tf.concat([batch_idxes, tf.reshape(mixed_actions, [batch_size, 1])], axis=1)
-    #mixed_act_q_values = tf.gather_nd(q_values, mixed_act_idxes)
-    #steer_mixed_actions = 3 * (opt_actions // 3) + (pi_actions % 3)
-    #mixed_actions = tf.where(mixed_act_q_values >= (1 - pilot_tol_ph) * opt_q_values, mixed_actions, steer_mixed_actions)
-
-      # if necessary, switch steering and main
-    #mixed_act_idxes = tf.concat([batch_idxes, tf.reshape(mixed_actions, [batch_size, 1])], axis=1)
-    #mixed_act_q_values = tf.gather_nd(q_values, mixed_act_idxes)
-    #actions = tf.where(mixed_act_q_values >= (1 - pilot_tol_ph) * opt_q_values, mixed_actions, opt_actions)
-
+    # # if necessary, switch steering and keep main
+    # mixed_actions = 3 * (pi_actions // 3) + (opt_actions % 3)
+    # mixed_act_idxes = tf.concat([batch_idxes, tf.reshape(mixed_actions, [batch_size, 1])], axis=1)
+    # mixed_act_q_values = tf.gather_nd(q_values, mixed_act_idxes)
+    #
+    # mixed_actions = tf.where(pi_act_q_values >= (1 - pilot_tol_ph) * mixed_act_q_values, pi_actions, mixed_actions)
     actions = tf.where(pi_act_q_values >= (1-pilot_tol_ph) * opt_q_values, pi_actions, opt_actions)
 
     act = U.function(inputs=[

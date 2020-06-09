@@ -8,7 +8,7 @@ from copy import deepcopy
 
 import Box2D
 from Box2D.b2 import (edgeShape, circleShape, fixtureDef, polygonShape, revoluteJointDef, contactListener)
-
+import csv
 import gym
 import copy
 from gym import spaces
@@ -101,7 +101,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
 
     continuous = False
 
-    def __init__(self, empowerment, ac_continuous=True, pilot_policy=None, pilot_is_human=False, **extras):
+    def __init__(self, empowerment, ac_continuous=True, pilot_policy=None, pilot_is_human=False, log_file=None, **extras):
         EzPickle.__init__(self, empowerment, ac_continuous)
         self.seed()
         self.viewer = None
@@ -113,6 +113,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
         self.particles = []
         self.pilot_is_human = pilot_is_human
         self.prev_reward = None
+        self.log_file = log_file
 
         self.continuous = ac_continuous
         self.pilot_policy = pilot_policy
@@ -379,6 +380,7 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             obs_dim = OBS_DIM
             emp = self.compute_empowerment(state, obs_dim)
             reward += self.empowerment_coeff * height_scale * emp
+
         timeout = self.curr_step >= MAX_NUM_STEPS
         at_site = pos.x >= self.helipad_x1 and pos.x <= self.helipad_x2 and self.legs[0].ground_contact and self.legs[1].ground_contact
 
@@ -389,15 +391,31 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
 
 
         done = self.game_over or abs(state[0]) >= 1.0 or timeout or not self.lander.awake or self.num_steps_at_site > 3
-        if done:
+
+        info = {}
+        if done and not self.fake_step:
             if self.game_over or abs(state[0]) >= 1.0 or timeout:
                 reward = -100
             elif at_site:
                 reward = +100
-        info = {}
-        if done:
+            print(reward)
             info['trajectory'] = self.trajectory
             info['actions'] = self.actions
+            trajectory = np.asarray(self.trajectory)
+            with open(self.log_file + '_dist.csv', 'a', newline='') as logfile:
+                writer = csv.writer(logfile, delimiter=',')
+                dist_to_goal = np.sqrt(trajectory[:,0] ** 2 + trajectory[:,1] ** 2)
+                writer.writerow([reward] + list(dist_to_goal))
+
+            with open(self.log_file + '_speed.csv', 'a', newline='') as logfile:
+                writer = csv.writer(logfile, delimiter=',')
+                speed = np.sqrt(trajectory[:,2] ** 2 + trajectory[:,3] ** 2)
+                writer.writerow([reward] + list(speed))
+
+            with open(self.log_file + '_angle.csv', 'a', newline='') as logfile:
+                writer = csv.writer(logfile, delimiter=',')
+                angle = trajectory[:,4]
+                writer.writerow([reward] + list(angle))
 
         state = np.array(state, dtype=np.float32)
 
@@ -521,13 +539,14 @@ class LunarLanderEmpowerment(gym.Env, EzPickle):
             # compute the convex hull of the final state
         # e.g., by scipy.spatial.ConvexHull
         try:
-            ch_volume = np.var(X[:,:2])
-            #ch = ConvexHull(X)
+            fs = X[:,:2]
+            est_emp = np.var(fs)
+            #ch = ConvexHull(fs)
+
             # take volume
             #ch_volume = ch.volume
         except Exception as e:
-            ch_volume = 0
+            est_emp = 0
         self.fake_step = False
-        print(ch_volume,"empowerment")
-        return ch_volume
+        return est_emp
 

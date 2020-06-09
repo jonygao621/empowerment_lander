@@ -11,6 +11,7 @@ from baselines.common.schedules import LinearSchedule
 from baselines.common import set_global_seeds
 
 import time
+import csv
 
 from baselines import deepq
 from baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
@@ -22,6 +23,7 @@ from baselines.deepq.models import build_q_func
 
 from policies.co_build_graph import *
 from utils.env_utils import *
+import utils.env_utils as utils
 
 import uuid
 import cloudpickle
@@ -143,10 +145,8 @@ def learn(
     using_control_sharing = True #pilot_tol > 0
 
     if pilot_is_human:
-        global human_agent_action
-        global human_agent_active
-        human_agent_action = init_human_action()
-        human_agent_active = False
+        utils.human_agent_action = init_human_action()
+        utils.human_agent_active = False
 
     act, train, update_target, debug = co_build_train(
         scope=scope,
@@ -156,7 +156,7 @@ def learn(
         optimizer=tf.train.AdamOptimizer(learning_rate=lr),
         gamma=gamma,
         grad_norm_clipping=10,
-        reuse=reuse,
+        reuse=tf.AUTO_REUSE if reuse else False,
         using_control_sharing=using_control_sharing
     )
 
@@ -216,8 +216,11 @@ def learn(
 
             act_kwargs = {}
             if using_control_sharing:
-                act_kwargs['pilot_action'] = env.unwrapped.pilot_policy.step(obs[None, :9])
-                act_kwargs['pilot_tol'] = pilot_tol if not pilot_is_human or (pilot_is_human and human_agent_active) else 0
+                if pilot_is_human:
+                    act_kwargs['pilot_action'] =  env.unwrapped.pilot_policy(obs[None, :9])
+                else:
+                    act_kwargs['pilot_action'] = env.unwrapped.pilot_policy.step(obs[None, :9])
+                act_kwargs['pilot_tol'] = pilot_tol if not pilot_is_human or (pilot_is_human and utils.human_agent_active) else 0
             else:
                 act_kwargs['update_eps'] = exploration.value(t)
 
@@ -242,10 +245,8 @@ def learn(
                 reset = True
 
                 if pilot_is_human:
-#                    global human_agent_action
-#                    global human_agent_active
-                    human_agent_action = init_human_action()
-                    human_agent_active = False
+                    utils.human_agent_action = init_human_action()
+                    utils.human_agent_active = False
                     time.sleep(2)
 
 
@@ -331,7 +332,7 @@ class CoPilotPolicy(object):
             network='mlp',
             total_timesteps=max_timesteps,
             pilot_tol=pilot_tol,
-            reuse=False,
+            reuse=pilot_is_human,
             lr=1e-3,
             target_network_update_freq=500,
             pilot_is_human=pilot_is_human,

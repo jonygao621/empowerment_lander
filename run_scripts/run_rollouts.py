@@ -96,7 +96,7 @@ def run_experiment(empowerment):
     n_training_episodes = 500
 
     env = LunarLanderEmpowerment(empowerment=0.0, ac_continuous=False)
-    full_pilot_policy = FullPilotPolicy(base_dir, policy_path="data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320934553/full_pilot_policy.pkl")
+    full_pilot_policy = FullPilotPolicy(base_dir, policy_path="lander_data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320934553/full_pilot_policy.pkl")
     laggy_pilot_policy = LaggyPilotPolicy(base_dir, full_policy=full_pilot_policy.policy)
     noisy_pilot_policy = NoisyPilotPolicy(base_dir, full_policy=full_pilot_policy.policy)
     noop_pilot_policy = NoopPilotPolicy(base_dir, full_policy=full_pilot_policy.policy)
@@ -104,38 +104,30 @@ def run_experiment(empowerment):
     sim_pilots = [full_pilot_policy, laggy_pilot_policy, noisy_pilot_policy, noop_pilot_policy, sensor_pilot_policy]
 
     pilot_names = ['full', 'laggy', 'noisy', 'noop', 'sensor']
-    n_eval_eps = 100
+    n_eval_eps = 2
 
-    #
-    # pilot_evals = [
-    #     list(zip(*[run_ep(sim_policy, env, render=False, max_ep_len=max_ep_len) for _ in
-    #                range(n_eval_eps)])) for
-    #     sim_policy in sim_pilots]
-    #
-    # mean_rewards = [np.mean(pilot_eval[0]) for pilot_eval in pilot_evals]
-    # outcome_distrns = [Counter(pilot_eval[1]) for pilot_eval in pilot_evals]
-    #
-    # print('\n'.join([str(x) for x in zip(pilot_names, mean_rewards, outcome_distrns)]))
+
+    pilot_evals = [
+        list(zip(*[run_ep(sim_policy, env, render=True, max_ep_len=max_ep_len) for _ in
+                   range(n_eval_eps)])) for
+        sim_policy in sim_pilots]
+
+    mean_rewards = [np.mean(pilot_eval[0]) for pilot_eval in pilot_evals]
+    outcome_distrns = [Counter(pilot_eval[1]) for pilot_eval in pilot_evals]
+
+    print('\n'.join([str(x) for x in zip(pilot_names, mean_rewards, outcome_distrns)]))
 
     pilot_tol_of_id = {
-      #  'noop': 0,
+        'noop': 0,
         'laggy': 0.7,
         'noisy': 0.3,
-     #   'sensor': 0.1
+        'sensor': 0.1
     }
 
-    #noop_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320934553/co_deepq_noop_policy.pkl')
-    #noisy_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-27-CopilotTraining/2020_01_27_CopilotTraining-1580170302662/co_deepq_noisy_policy.pkl')
-    #laggy_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320934553/co_deepq_laggy_policy.pkl')
-    #sensor_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320942322/co_deepq_sensor_policy.pkl')
-    sensor_copilot_policy = CoPilotPolicy(base_dir,policy_path='data/2020-01-28-CopilotTraining/2020_01_28_CopilotTraining-1580235149954/co_deepq_sensor_policy.pkl')
-    #sensor_copilot_policy = CoPilotPolicy(base_dir, policy_path='data/2020-01-27-CopilotTraining/2020_01_27_CopilotTraining-1580170302662/co_deepq_sensor_policy.pkl')
+    noop_copilot_policy = CoPilotPolicy(base_dir, policy_path='lander_data/2020-01-29-CopilotTraining/2020_01_29_CopilotTraining-1580320934553/co_deepq_noop_policy.pkl')
 
     copilot_of_training_pilot = {
-     #   'noop' : noop_copilot_policy,
-    #    'laggy' : laggy_copilot_policy,
-    #    'noisy' : noisy_copilot_policy,
-        'sensor' : sensor_copilot_policy
+        'noop' : noop_copilot_policy
     }
 
     cross_evals = {}
@@ -150,7 +142,7 @@ def run_experiment(empowerment):
             copilot_policy = copilot_of_training_pilot[training_pilot_id]
 
             co_env_eval = LunarLanderEmpowerment(empowerment=empowerment, ac_continuous=False, pilot_policy=eval_pilot_policy)
-            cross_evals[(training_pilot_id, eval_pilot_id)] = list(zip(*[run_ep_copilot(copilot_policy, co_env_eval, pilot=eval_pilot_policy, pilot_tol=eval_pilot_tol, render=False, max_ep_len=max_ep_len)[:2] for _ in
+            cross_evals[(training_pilot_id, eval_pilot_id)] = list(zip(*[run_ep_copilot(copilot_policy, co_env_eval, pilot=eval_pilot_policy, pilot_tol=eval_pilot_tol, render=True, max_ep_len=max_ep_len)[:2] for _ in
                                                                range(n_eval_eps)]))
 
     for key, value in cross_evals.items():

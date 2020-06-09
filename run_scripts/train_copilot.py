@@ -26,11 +26,11 @@ from baselines.common import models
 from baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from baselines.deepq.deepq import ActWrapper
 
-# import doodad as dd
-# import doodad.mount as mount
-# import doodad.easy_sweep.launcher as launcher
-# import multiprocessing
-# from doodad.easy_sweep.hyper_sweep import run_sweep_doodad
+import doodad as dd
+import doodad.mount as mount
+import doodad.easy_sweep.launcher as launcher
+import multiprocessing
+from doodad.easy_sweep.hyper_sweep import run_sweep_doodad
 
 from experiment_utils import config
 from experiment_utils.utils import query_yes_no
@@ -89,15 +89,22 @@ def run_ep_copilot(policy, env, max_ep_len, pilot, pilot_tol, render=False, pilo
     return totalr, outcome, trajectory, actions
 
 
-def run_experiment(empowerment, exp_title):
+def run_experiment(empowerment, exp_title, seed):
     now = datetime.now()
-    base_dir = os.getcwd() + '/data/' + exp_title + now.strftime("%m-%d-%Y-%H-%M-%S") + "_" + empowerment #os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
+
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.set_random_seed(seed)
+    base_dir = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
+#    base_dir = os.getcwd() + '/data/' + exp_title + now.strftime("%m-%d-%Y-%H-%M-%S") + "_" + empowerment #
     logger.configure(dir=base_dir, format_strs=['stdout', 'log', 'csv', 'tensorboard'])
 
     f = open(base_dir + "/config.txt", "w")
     f.write("Empowerment: {}\n".format(empowerment))
     f.write("Num concat: 20\n")
+    f.write("Seed: {}\n".format(seed))
     f.write("No scale by height\n")
+    f.write("Keep main engine from pilot")
     f.close()
 
     max_ep_len = 1000
@@ -193,35 +200,29 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='local',
                         help='Mode for running the experiments - local: runs on local machine, '
                              'ec2: runs on AWS ec2 cluster (requires a proper configuration file)')
-    #parser.add_argument('--num_cpu', '-c', type=int, default=multiprocessing.cpu_count(),
-    #                    help='Number of threads to use for running experiments')
     parser.add_argument('--empowerment', type=float, default=100.0,
                         help='Empowerment coefficient')
     parser.add_argument('--seed', type=int, default=1, help='Seed')
     args = parser.parse_args()
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    tf.set_random_seed(args.seed)
 
-    # local_mount = mount.MountLocal(local_dir=config.BASE_DIR, pythonpath=True)
-    # docker_mount_point = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
-    #
-    # sweeper = launcher.DoodadSweeper([local_mount], docker_img=config.DOCKER_IMAGE,
-    #                                  docker_output_dir=docker_mount_point,
-    #                                  local_output_dir=os.path.join(config.DATA_DIR, 'local', EXP_NAME))
-    # sweeper.mount_out_s3 = mount.MountS3(s3_path='', mount_point=docker_mount_point, output=True)
-    #
-    # if args.mode == 'ec2':
-    #     if query_yes_no("Continue?"):
-    #         sweeper.run_sweep_ec2(run_experiment, {'empowerment':[0.01]}, bucket_name=config.S3_BUCKET_NAME,
-    #                               instance_type='c4.8xlarge',
-    #                               region='us-west-1', s3_log_name=EXP_NAME, add_date_to_logname=True)
-    # elif args.mode == 'local_docker':
-    #         mode_docker = dd.mode.LocalDocker(
-    #             image=sweeper.image,
-    #         )
-    #         run_sweep_doodad(run_experiment, {'empowerment':[100.0]}, run_mode=mode_docker,
-    #                          mounts=sweeper.mounts)
-    # else:
-    #
-    run_experiment(empowerment=args.empowerment, exp_title=args.exp_title + '_' + str(args.seed))
+    local_mount = mount.MountLocal(local_dir=config.BASE_DIR, pythonpath=True)
+    docker_mount_point = os.path.join(config.DOCKER_MOUNT_DIR, EXP_NAME)
+
+    sweeper = launcher.DoodadSweeper([local_mount], docker_img=config.DOCKER_IMAGE,
+                                     docker_output_dir=docker_mount_point,
+                                     local_output_dir=os.path.join(config.DATA_DIR, 'local', EXP_NAME))
+    sweeper.mount_out_s3 = mount.MountS3(s3_path='', mount_point=docker_mount_point, output=True)
+
+    if args.mode == 'ec2':
+        if query_yes_no("Continue?"):
+            sweeper.run_sweep_ec2(run_experiment, {'empowerment':[0.001], 'exp_title': [''], 'seed':[1]}, bucket_name=config.S3_BUCKET_NAME,
+                                  instance_type='c4.2xlarge',
+                                  region='us-west-1', s3_log_name=EXP_NAME, add_date_to_logname=True)
+    elif args.mode == 'local_docker':
+            mode_docker = dd.mode.LocalDocker(
+                image=sweeper.image,
+            )
+            run_sweep_doodad(run_experiment, {'empowerment':[100.0]}, run_mode=mode_docker,
+                             mounts=sweeper.mounts)
+    else:
+        run_experiment(empowerment=args.empowerment, exp_title=args.exp_title + '_' + str(args.seed))
