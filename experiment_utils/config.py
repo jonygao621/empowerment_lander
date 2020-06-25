@@ -6,6 +6,6 @@ DATA_DIR = os.path.join(BASE_DIR, 'data')
 
 DOCKER_MOUNT_DIR = '/root/code/data'
 
-DOCKER_IMAGE = 'yuqingd/empowerment_lander:latest'
+DOCKER_IMAGE = '/empowerment_lander:latest'
 
 S3_BUCKET_NAME = 'empowerment.lander'

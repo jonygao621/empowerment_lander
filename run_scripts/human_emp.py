@@ -92,7 +92,11 @@ def run_test(base_dir, empowerment, scope):
     co_env.render()
     co_env.unwrapped.viewer.window.on_key_press = key_press
     co_env.unwrapped.viewer.window.on_key_release = key_release
-    copilot_policy = CoPilotPolicy(base_dir, policy_path='policies/pretrained_policies/{}_policy.pkl'.format(scope))
+    try:
+        copilot_policy = CoPilotPolicy(base_dir, policy_path='policies/pretrained_policies/{}_policy.pkl'.format(scope))
+    except:
+        copilot_policy = CoPilotPolicy(base_dir)
+        print("No pretrained policies found")
     copilot_policy.learn(co_env, max_timesteps=max_ep_len * n_training_episodes, pilot=human_pilot_policy, pilot_is_human=True, pilot_tol=0.8, copilot_scope=scope)
     co_env.close()
 
